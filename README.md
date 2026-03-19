@@ -142,3 +142,7 @@ PDDProfit/
 ## 许可证
 
 MIT License
+
+## 版权信息
+
+© 2024-2026 wfpet169. All rights reserved.
