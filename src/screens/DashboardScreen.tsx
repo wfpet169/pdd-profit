@@ -226,6 +226,11 @@ const DashboardScreen: React.FC = () => {
           <ArrowDown size={20} color="#ef4444" />
         )}
       </div>
+
+      {/* 版权信息 */}
+      <div style={styles.copyright}>
+        © 2024-2026 wfpet169. All rights reserved.
+      </div>
     </div>
   );
 };
@@ -374,6 +379,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 28,
     fontWeight: 700,
     color: '#1f2937',
+  },
+  copyright: {
+    textAlign: 'center',
+    marginTop: 32,
+    padding: 16,
+    color: '#9ca3af',
+    fontSize: 12,
   },
 };
 

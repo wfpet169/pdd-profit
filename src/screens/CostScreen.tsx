@@ -396,6 +396,11 @@ const CostScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 版权信息 */}
+      <div style={styles.copyright}>
+        © 2024-2026 wfpet169. All rights reserved.
+      </div>
     </div>
   );
 };
@@ -605,6 +610,13 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#374151',
     fontSize: 14,
     lineHeight: 1.6,
+  },
+  copyright: {
+    textAlign: 'center',
+    marginTop: 32,
+    padding: 16,
+    color: '#9ca3af',
+    fontSize: 12,
   },
 };
 
