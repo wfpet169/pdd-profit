@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Trash2, Download, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, Filter } from 'lucide-react';
 import { orderStorage } from '../storage/Database';
 import { calculateOrderProfitWithConfig } from '../services/ProfitCalculator';
@@ -46,79 +46,242 @@ const OrdersScreen: React.FC = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
-  // 获取所有唯一的订单状态及数量
-  const statusCounts = orders.reduce((acc, order) => {
-    if (order.orderStatus) {
-      acc[order.orderStatus] = (acc[order.orderStatus] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<string, number>);
-  const uniqueOrderStatuses = Object.keys(statusCounts).sort();
-
-  // 获取订单号唯一值
-  const orderNoCounts = orders.reduce((acc, order) => {
-    acc[order.orderNo] = (acc[order.orderNo] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const uniqueOrderNos = Object.keys(orderNoCounts).sort();
-
-  // 获取商品规格唯一值
-  const productNameCounts = orders.reduce((acc, order) => {
-    acc[order.productName] = (acc[order.productName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const uniqueProductNames = Object.keys(productNameCounts).sort();
-
-  // 获取数量唯一值
-  const quantityCounts = orders.reduce((acc, order) => {
-    acc[order.quantity] = (acc[order.quantity] || 0) + 1;
-    return acc;
-  }, {} as Record<number, number>);
-  const uniqueQuantities = Object.keys(quantityCounts).map(Number).sort((a, b) => a - b);
-
-  // 获取金额唯一值
-  const amountCounts = orders.reduce((acc, order) => {
-    acc[order.totalAmount] = (acc[order.totalAmount] || 0) + 1;
-    return acc;
-  }, {} as Record<number, number>);
-  const uniqueAmounts = Object.keys(amountCounts).map(Number).sort((a, b) => a - b);
-
-  // 先计算利润，确保 profit 字段有值
+  // 先计算利润，确保 profit 字段有值（用于成本、利润、毛利率的筛选）
   const ordersWithProfit = orders.map(calculateOrderProfitWithConfig);
 
-  // 获取成本唯一值（计算后，与显示一致）
-  const costCounts: Record<number, number> = {};
-  ordersWithProfit.forEach(order => {
-    const cost = Math.round(((order.costPrice || 0) * (order.quantity || 0) + (order.platformFee || 0) + (order.shippingFee || 0) + (order.otherFees || 0)) * 100) / 100;
-    if (!isNaN(cost)) {
-      costCounts[cost] = (costCounts[cost] || 0) + 1;
-    }
-  });
-  const uniqueCosts = Object.keys(costCounts).map(Number).sort((a, b) => a - b);
+  // ========== 联动筛选数据计算 ==========
+  // 每个下拉的选项基于原始 orders，但计数基于"排除自身条件"的数据
 
-  // 获取利润唯一值（与显示一致）
-  const profitCounts: Record<number, number> = {};
-  ordersWithProfit.forEach(order => {
-    const profit = Math.round((order.profit || 0) * 100) / 100;
-    profitCounts[profit] = (profitCounts[profit] || 0) + 1;
-  });
-  const uniqueProfits = Object.keys(profitCounts).map(Number).sort((a, b) => a - b);
+  // 辅助函数：计算订单的成本
+  const calculateCost = (order: Order): number => {
+    return Math.round(((order.costPrice || 0) * (order.quantity || 0) + (order.platformFee || 0) + (order.shippingFee || 0) + (order.otherFees || 0)) * 100) / 100;
+  };
 
-  // 获取毛利率唯一值
-  const profitMarginCounts: Record<number, number> = {};
-  ordersWithProfit.forEach(order => {
-    const margin = order.totalAmount > 0
+  // 辅助函数：计算订单的利润
+  const calculateProfit = (order: Order): number => {
+    return Math.round((order.profit || 0) * 100) / 100;
+  };
+
+  // 辅助函数：计算订单的毛利率
+  const calculateMargin = (order: Order): number => {
+    return order.totalAmount > 0
       ? Math.round(((order.profit || 0) / order.totalAmount * 100) * 100) / 100
       : 0;
-    profitMarginCounts[margin] = (profitMarginCounts[margin] || 0) + 1;
-  });
+  };
+
+  // 计算排除特定条件的数据（用于某列下拉的计数）
+  // 注意：各列的唯一值（选项列表）始终基于原始 orders，计数基于排除自身条件后的数据
+
+  // 订单号下拉：排除自身条件，计数用
+  const getFilteredForOrderNo = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedProductNames, selectedQuantities, selectedAmounts, selectedDates, selectedCosts, selectedProfits, selectedProfitMargins]);
+
+  // 商品规格下拉：排除自身条件，计数用
+  const getFilteredForProductName = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedQuantities, selectedAmounts, selectedDates, selectedCosts, selectedProfits, selectedProfitMargins]);
+
+  // 数量下拉：排除自身条件，计数用
+  const getFilteredForQuantity = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedAmounts, selectedDates, selectedCosts, selectedProfits, selectedProfitMargins]);
+
+  // 金额下拉：排除自身条件，计数用
+  const getFilteredForAmount = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedDates, selectedCosts, selectedProfits, selectedProfitMargins]);
+
+  // 成本下拉：排除自身条件，计数用
+  const getFilteredForCost = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedAmounts, selectedDates, selectedProfits, selectedProfitMargins]);
+
+  // 利润下拉：排除自身条件，计数用
+  const getFilteredForProfit = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedAmounts, selectedDates, selectedCosts, selectedProfitMargins]);
+
+  // 毛利率下拉：排除自身条件，计数用
+  const getFilteredForMargin = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedDates.length > 0 && !selectedDates.includes(order.orderDate)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedAmounts, selectedDates, selectedCosts, selectedProfits]);
+
+  // 日期下拉：排除自身条件，计数用
+  const getFilteredForDate = useMemo(() => {
+    return ordersWithProfit.filter(order => {
+      if (selectedOrderStatuses.length > 0 && !selectedOrderStatuses.includes(order.orderStatus)) return false;
+      if (selectedOrderNos.length > 0 && !selectedOrderNos.includes(order.orderNo)) return false;
+      if (selectedProductNames.length > 0 && !selectedProductNames.includes(order.productName)) return false;
+      if (selectedQuantities.length > 0 && !selectedQuantities.includes(order.quantity)) return false;
+      if (selectedAmounts.length > 0 && !selectedAmounts.includes(order.totalAmount)) return false;
+      if (selectedCosts.length > 0 && !selectedCosts.includes(calculateCost(order))) return false;
+      if (selectedProfits.length > 0 && !selectedProfits.includes(calculateProfit(order))) return false;
+      if (selectedProfitMargins.length > 0 && !selectedProfitMargins.includes(calculateMargin(order))) return false;
+      return true;
+    });
+  }, [ordersWithProfit, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedAmounts, selectedCosts, selectedProfits, selectedProfitMargins]);
+
+  // ========== 各列唯一值和计数 ==========
+  // 唯一值基于筛选后的数据（联动），但保留已选中的选项
+
+  // 订单状态
+  const statusCounts = useMemo(() => {
+    return getFilteredForOrderNo.reduce((acc, order) => {
+      if (order.orderStatus) {
+        acc[order.orderStatus] = (acc[order.orderStatus] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+  }, [getFilteredForOrderNo]);
+  const uniqueOrderStatuses = Object.keys(statusCounts).sort();
+
+  // 订单号（基于筛选后的数据，联动）
+  const orderNoCounts = useMemo(() => {
+    return getFilteredForOrderNo.reduce((acc, order) => {
+      acc[order.orderNo] = (acc[order.orderNo] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [getFilteredForOrderNo]);
+  const uniqueOrderNos = Object.keys(orderNoCounts).sort();
+
+  // 商品规格（基于筛选后的数据，联动）
+  const productNameCounts = useMemo(() => {
+    return getFilteredForProductName.reduce((acc, order) => {
+      acc[order.productName] = (acc[order.productName] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [getFilteredForProductName]);
+  const uniqueProductNames = Object.keys(productNameCounts).sort();
+
+  // 数量（基于筛选后的数据，联动）
+  const quantityCounts = useMemo(() => {
+    return getFilteredForQuantity.reduce((acc, order) => {
+      acc[order.quantity] = (acc[order.quantity] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
+  }, [getFilteredForQuantity]);
+  const uniqueQuantities = Object.keys(quantityCounts).map(Number).sort((a, b) => a - b);
+
+  // 金额（基于筛选后的数据，联动）
+  const amountCounts = useMemo(() => {
+    return getFilteredForAmount.reduce((acc, order) => {
+      acc[order.totalAmount] = (acc[order.totalAmount] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
+  }, [getFilteredForAmount]);
+  const uniqueAmounts = Object.keys(amountCounts).map(Number).sort((a, b) => a - b);
+
+  // 成本（基于筛选后的数据，联动）
+  const costCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    getFilteredForCost.forEach(order => {
+      const cost = calculateCost(order);
+      counts[cost] = (counts[cost] || 0) + 1;
+    });
+    return counts;
+  }, [getFilteredForCost]);
+  const uniqueCosts = Object.keys(costCounts).map(Number).sort((a, b) => a - b);
+
+  // 利润（基于筛选后的数据，联动）
+  const profitCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    getFilteredForProfit.forEach(order => {
+      const profit = calculateProfit(order);
+      counts[profit] = (counts[profit] || 0) + 1;
+    });
+    return counts;
+  }, [getFilteredForProfit]);
+  const uniqueProfits = Object.keys(profitCounts).map(Number).sort((a, b) => a - b);
+
+  // 毛利率（基于筛选后的数据，联动）
+  const profitMarginCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    getFilteredForMargin.forEach(order => {
+      const margin = calculateMargin(order);
+      counts[margin] = (counts[margin] || 0) + 1;
+    });
+    return counts;
+  }, [getFilteredForMargin]);
   const uniqueProfitMargins = Object.keys(profitMarginCounts).map(Number).sort((a, b) => a - b);
 
-  // 获取日期唯一值
-  const dateCounts = orders.reduce((acc, order) => {
-    acc[order.orderDate] = (acc[order.orderDate] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // 日期（基于筛选后的数据，联动）
+  const dateCounts = useMemo(() => {
+    return getFilteredForDate.reduce((acc, order) => {
+      acc[order.orderDate] = (acc[order.orderDate] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [getFilteredForDate]);
   const uniqueDates = Object.keys(dateCounts).sort();
 
   useEffect(() => {
@@ -1080,9 +1243,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     padding: 8,
-    maxHeight: 300,
     minHeight: 50,
-    overflowY: 'auto',
     minWidth: 220,
     whiteSpace: 'nowrap',
   },
