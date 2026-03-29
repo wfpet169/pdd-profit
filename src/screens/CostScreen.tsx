@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Download, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Download, Upload, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
 import { costConfigStorage } from '../storage/Database';
 import type { CostConfig } from '../types';
 
@@ -9,6 +9,8 @@ const CostScreen: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   const [selectedCostIds, setSelectedCostIds] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<Partial<CostConfig>>({
     productName: '',
@@ -25,6 +27,13 @@ const CostScreen: React.FC = () => {
   const loadConfigs = () => {
     setConfigs(costConfigStorage.getAll());
   };
+
+  // 分页计算
+  const totalPages = Math.ceil(configs.length / pageSize);
+  const paginatedConfigs = configs.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   // 导出成本数据
   const handleExport = () => {
@@ -220,93 +229,13 @@ const CostScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 添加/编辑表单 */}
-      {showAddForm && (
-        <div style={styles.formCard}>
-          <div style={styles.formHeader}>
-            <h3>{editingId ? '编辑成本配置' : '添加成本配置'}</h3>
-            <button onClick={resetForm} style={styles.closeBtn}>
-              <X size={20} />
-            </button>
-          </div>
-
-          <div style={styles.formGrid}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>商品规格 *</label>
-              <input
-                type="text"
-                value={formData.productName}
-                onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
-                style={styles.input}
-                placeholder="必须与导入Excel规格名称一致"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>成本价 (元/件)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.costPrice}
-                onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
-                style={styles.input}
-                placeholder="0"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>平台服务费 (%)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={formData.platformFeeRate}
-                onChange={(e) => setFormData({ ...formData, platformFeeRate: parseFloat(e.target.value) || 0 })}
-                style={styles.input}
-                placeholder="0.6"
-              />
-              <span style={styles.hint}>拼多多默认约0.6%</span>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>快递成本 (元/单)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.shippingCost}
-                onChange={(e) => setFormData({ ...formData, shippingCost: parseFloat(e.target.value) || 0 })}
-                style={styles.input}
-                placeholder="0"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>其他成本 (元/单)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.otherCosts}
-                onChange={(e) => setFormData({ ...formData, otherCosts: parseFloat(e.target.value) || 0 })}
-                style={styles.input}
-                placeholder="0"
-              />
-              <span style={styles.hint}>包装、人工等</span>
-            </div>
-          </div>
-
-          <div style={styles.formActions}>
-            <button onClick={resetForm} style={styles.cancelBtn}>
-              取消
-            </button>
-            <button onClick={editingId ? handleUpdate : handleAdd} style={styles.saveBtn}>
-              <Save size={18} />
-              保存
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 成本配置列表 */}
       <div style={styles.listSection}>
+        {configs.length > 0 && (
+          <div style={styles.listHeader}>
+            <span style={styles.countBadge}>共 {configs.length} 条成本配置</span>
+          </div>
+        )}
         {configs.length === 0 ? (
           <div style={styles.emptyState}>
             <p>暂无成本配置</p>
@@ -333,7 +262,7 @@ const CostScreen: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {configs.map(config => (
+                {paginatedConfigs.map(config => (
                   <tr key={config.id} style={styles.tr}>
                     <td style={{...styles.td, textAlign: 'center'}}>
                       <input
@@ -365,6 +294,90 @@ const CostScreen: React.FC = () => {
         )}
       </div>
 
+      {/* 分页 */}
+      {configs.length > 0 && (
+        <div style={styles.paginationContainer}>
+          <div style={styles.pageSizeSelector}>
+            <span style={{ marginRight: 8 }}>每页</span>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+              style={styles.pageSizeSelect}
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span style={{ marginLeft: 8 }}>条</span>
+          </div>
+
+          <div style={styles.pagination}>
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              style={styles.pageBtn}
+              title="首页"
+            >
+              <ChevronFirst size={20} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={styles.pageBtn}
+            >
+              <ChevronLeft size={20} />
+            </button>
+
+            {/* 页码按钮 */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  style={{
+                    ...styles.pageBtn,
+                    ...(currentPage === pageNum ? styles.pageBtnActive : {}),
+                  }}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={styles.pageBtn}
+            >
+              <ChevronRight size={20} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              style={styles.pageBtn}
+              title="末页"
+            >
+              <ChevronLast size={20} />
+            </button>
+
+            <span style={styles.pageInfo}>
+              第 {currentPage} / {totalPages} 页
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 说明 */}
       <div style={styles.instructions}>
         <h3>成本配置说明</h3>
@@ -391,6 +404,93 @@ const CostScreen: React.FC = () => {
               </button>
               <button onClick={handleBatchDelete} style={styles.confirmBtn}>
                 删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 添加/编辑表单 Modal */}
+      {showAddForm && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.formModal}>
+            <div style={styles.formHeader}>
+              <h3>{editingId ? '编辑成本配置' : '添加成本配置'}</h3>
+              <button onClick={resetForm} style={styles.closeBtn}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={styles.formGrid}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>商品规格 *</label>
+                <input
+                  type="text"
+                  value={formData.productName}
+                  onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                  style={styles.input}
+                  placeholder="必须与导入Excel规格名称一致"
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>成本价 (元/件)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.costPrice}
+                  onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
+                  style={styles.input}
+                  placeholder="0"
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>平台服务费 (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.platformFeeRate}
+                  onChange={(e) => setFormData({ ...formData, platformFeeRate: parseFloat(e.target.value) || 0 })}
+                  style={styles.input}
+                  placeholder="0.6"
+                />
+                <span style={styles.hint}>拼多多默认约0.6%</span>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>快递成本 (元/单)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.shippingCost}
+                  onChange={(e) => setFormData({ ...formData, shippingCost: parseFloat(e.target.value) || 0 })}
+                  style={styles.input}
+                  placeholder="0"
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>其他成本 (元/单)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.otherCosts}
+                  onChange={(e) => setFormData({ ...formData, otherCosts: parseFloat(e.target.value) || 0 })}
+                  style={styles.input}
+                  placeholder="0"
+                />
+                <span style={styles.hint}>包装、人工等</span>
+              </div>
+            </div>
+
+            <div style={styles.formActions}>
+              <button onClick={resetForm} style={styles.cancelBtn}>
+                取消
+              </button>
+              <button onClick={editingId ? handleUpdate : handleAdd} style={styles.saveBtn}>
+                <Save size={18} />
+                保存
               </button>
             </div>
           </div>
@@ -512,6 +612,20 @@ const styles: Record<string, React.CSSProperties> = {
   listSection: {
     marginBottom: 24,
   },
+  listHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  countBadge: {
+    backgroundColor: '#f3f4f6',
+    color: '#374151',
+    padding: '6px 12px',
+    borderRadius: 16,
+    fontSize: 14,
+    fontWeight: 500,
+  },
   emptyState: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -537,6 +651,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 24,
     minWidth: 320,
     maxWidth: 400,
+  },
+  formModal: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    minWidth: 400,
+    maxWidth: 560,
   },
   modalActions: {
     display: 'flex',
@@ -607,9 +728,56 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f9fafb',
     borderRadius: 12,
     padding: 24,
+    marginTop: 32,
     color: '#374151',
     fontSize: 14,
     lineHeight: 1.6,
+  },
+  paginationContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  pageSizeSelector: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  pageSizeSelect: {
+    padding: '6px 12px',
+    border: '1px solid #e5e7eb',
+    borderRadius: 6,
+    fontSize: 14,
+    cursor: 'pointer',
+  },
+  pagination: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pageBtn: {
+    padding: '8px 12px',
+    backgroundColor: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 8,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  pageBtnActive: {
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    borderColor: '#3b82f6',
+  },
+  pageInfo: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginLeft: 12,
   },
   copyright: {
     textAlign: 'center',

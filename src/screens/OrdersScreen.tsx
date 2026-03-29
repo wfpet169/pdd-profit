@@ -46,6 +46,11 @@ const OrdersScreen: React.FC = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
+  // 自定义 Tooltip 状态（用于可复制的提示）
+  const [tooltipInfo, setTooltipInfo] = useState<{ id: string; field: string; text: string; x: number; y: number } | null>(null);
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
+  const hideTooltipTimeoutRef = useRef<number | null>(null);
+
   // 先计算利润，确保 profit 字段有值（用于成本、利润、毛利率的筛选）
   const ordersWithProfit = orders.map(calculateOrderProfitWithConfig);
 
@@ -968,8 +973,32 @@ const OrdersScreen: React.FC = () => {
                       onChange={() => handleSelectOne(order.id)}
                     />
                   </td>
-                  <td style={styles.td} title={order.orderNo}>{order.orderNo}</td>
-                  <td style={styles.td} title={order.productName}>{order.productName}</td>
+                  <td
+                    style={styles.td}
+                    onMouseEnter={(e) => {
+                      if (hideTooltipTimeoutRef.current) clearTimeout(hideTooltipTimeoutRef.current);
+                      // 只有内容被截断时才显示 tooltip
+                      const isTruncated = e.currentTarget.scrollWidth > e.currentTarget.clientWidth;
+                      if (isTruncated) {
+                        setTooltipInfo({ id: order.id, field: 'orderNo', text: order.orderNo, x: e.clientX, y: e.clientY });
+                      }
+                      setIsTooltipHovered(false);
+                    }}
+                    onMouseLeave={() => { hideTooltipTimeoutRef.current = window.setTimeout(() => { if (!isTooltipHovered) setTooltipInfo(null); }, 50); }}
+                  >{order.orderNo}</td>
+                  <td
+                    style={styles.td}
+                    onMouseEnter={(e) => {
+                      if (hideTooltipTimeoutRef.current) clearTimeout(hideTooltipTimeoutRef.current);
+                      // 只有内容被截断时才显示 tooltip
+                      const isTruncated = e.currentTarget.scrollWidth > e.currentTarget.clientWidth;
+                      if (isTruncated) {
+                        setTooltipInfo({ id: order.id, field: 'productName', text: order.productName, x: e.clientX, y: e.clientY });
+                      }
+                      setIsTooltipHovered(false);
+                    }}
+                    onMouseLeave={() => { hideTooltipTimeoutRef.current = window.setTimeout(() => { if (!isTooltipHovered) setTooltipInfo(null); }, 50); }}
+                  >{order.productName}</td>
                   <td style={styles.td}>{order.quantity}</td>
                   <td style={styles.td}>{order.orderStatus || '-'}</td>
                   <td style={styles.td}>{formatCurrency(order.totalAmount)}</td>
@@ -1121,6 +1150,21 @@ const OrdersScreen: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 自定义 Tooltip（可复制） */}
+      {tooltipInfo && (
+        <div
+          style={{
+            ...styles.tooltip,
+            left: tooltipInfo.x + 10,
+            top: tooltipInfo.y + 10,
+          }}
+          onMouseEnter={() => { if (hideTooltipTimeoutRef.current) clearTimeout(hideTooltipTimeoutRef.current); setIsTooltipHovered(true); }}
+          onMouseLeave={() => { setIsTooltipHovered(false); setTooltipInfo(null); }}
+        >
+          {tooltipInfo.text}
         </div>
       )}
 
@@ -1476,6 +1520,20 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: 8,
     cursor: 'pointer',
+  },
+  tooltip: {
+    position: 'fixed',
+    backgroundColor: '#374151',
+    color: '#fff',
+    padding: '8px 12px',
+    borderRadius: 6,
+    fontSize: 13,
+    maxWidth: 400,
+    wordBreak: 'break-all',
+    zIndex: 9999,
+    cursor: 'text',
+    userSelect: 'text',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
   },
   copyright: {
     textAlign: 'center',
