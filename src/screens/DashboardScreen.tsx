@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Percent, ArrowUp, ArrowDown, RotateCcw, PackageX, Truck } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Percent, ArrowUp, ArrowDown, RotateCcw, PackageX, Truck, AlertTriangle } from 'lucide-react';
 import { orderStorage } from '../storage/Database';
 import { calculateProfitStats, generateChartData, getTopProducts } from '../services/ProfitCalculator';
-import { calculateReturnRateStats, calculateReturnLoss, type ReturnRateStats } from '../services/ReturnRateCalculator';
+import { calculateReturnRateStats, calculateReturnLoss, calculateGoodsLossCost, type ReturnRateStats } from '../services/ReturnRateCalculator';
 import type { TimeRange } from '../types';
 
 const DashboardScreen: React.FC = () => {
@@ -12,9 +12,11 @@ const DashboardScreen: React.FC = () => {
   const [returnStats, setReturnStats] = useState<ReturnRateStats>({
     totalOrders: 0, normalOrders: 0, cancelledBeforeShip: 0, cancelledInTransit: 0,
     returned: 0, totalCancelled: 0, returnRate: 0, cancelBeforeShipRate: 0,
-    cancelInTransitRate: 0, returnOrderRate: 0, normalOrderRate: 0, returnedRate: 0
+    cancelInTransitRate: 0, returnOrderRate: 0, normalOrderRate: 0, returnedRate: 0,
+    normalOrdersAmount: 0, returnedAmount: 0, cancelledBeforeShipAmount: 0, cancelledInTransitAmount: 0
   });
   const [returnLoss, setReturnLoss] = useState(0);
+  const [goodsLossCost, setGoodsLossCost] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
   const [topProducts, setTopProducts] = useState<{ name: string; quantity: number; revenue: number }[]>([]);
 
@@ -33,6 +35,9 @@ const DashboardScreen: React.FC = () => {
 
     const loss = calculateReturnLoss(allOrders, timeRange);
     setReturnLoss(loss);
+
+    const goodsLoss = calculateGoodsLossCost(allOrders, timeRange);
+    setGoodsLossCost(goodsLoss);
 
     const chart = generateChartData(allOrders, timeRange);
     setChartData(chart);
@@ -80,7 +85,7 @@ const DashboardScreen: React.FC = () => {
             <DollarSign size={24} color="#10b981" />
           </div>
           <div style={styles.statContent}>
-            <span style={styles.statLabel}>总收入（不含已取消订单）</span>
+            <span style={styles.statLabel} title="收入（已剔除退款、取消的订单）">收入（已剔除退款、取消的订单）</span>
             <span style={styles.statValue}>{formatCurrency(stats.totalRevenue)}</span>
           </div>
         </div>
@@ -90,7 +95,7 @@ const DashboardScreen: React.FC = () => {
             <ShoppingCart size={24} color="#3b82f6" />
           </div>
           <div style={styles.statContent}>
-            <span style={styles.statLabel}>订单数量（不含已取消订单）</span>
+            <span style={styles.statLabel} title="订单数量（已剔除退款、取消的订单）">订单数量（已剔除退款、取消的订单）</span>
             <span style={styles.statValue}>{stats.orderCount}</span>
           </div>
         </div>
@@ -100,7 +105,7 @@ const DashboardScreen: React.FC = () => {
             {stats.totalProfit >= 0 ? <TrendingUp size={24} color="#10b981" /> : <TrendingDown size={24} color="#ef4444" />}
           </div>
           <div style={styles.statContent}>
-            <span style={styles.statLabel}>总利润</span>
+            <span style={styles.statLabel} title="毛利润（已剔除退款、取消的订单）">毛利润（已剔除退款、取消的订单）</span>
             <span style={{ ...styles.statValue, color: stats.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
               {formatCurrency(stats.totalProfit)}
             </span>
@@ -112,8 +117,18 @@ const DashboardScreen: React.FC = () => {
             <Percent size={24} color="#8b5cf6" />
           </div>
           <div style={styles.statContent}>
-            <span style={styles.statLabel}>利润率</span>
+            <span style={styles.statLabel} title="毛利率（已剔除退款、取消的订单）">毛利率（已剔除退款、取消的订单）</span>
             <span style={styles.statValue}>{stats.profitRate.toFixed(2)}%</span>
+          </div>
+        </div>
+
+        <div style={styles.statCard}>
+          <div style={styles.statIcon}>
+            <AlertTriangle size={24} color="#ef4444" />
+          </div>
+          <div style={styles.statContent}>
+            <span style={styles.statLabel} title="货损成本（包含已发货、已收货退款的订单）">货损成本（包含已发货、已收货退款的订单）</span>
+            <span style={{ ...styles.statValue, color: '#ef4444' }}>-{formatCurrency(goodsLossCost)}</span>
           </div>
         </div>
       </div>
@@ -128,7 +143,7 @@ const DashboardScreen: React.FC = () => {
             <RotateCcw size={24} color="#f59e0b" />
           </div>
           <div style={styles.statContent}>
-            <span style={{...styles.statLabel, fontSize: 12}}>总退货率（不含未付款取消）</span>
+            <span style={{...styles.statLabel, fontSize: 12}} title="总退货率（已剔除未付款已取消）">总退货率（已剔除未付款已取消）</span>
             <span style={{ ...styles.statValue, color: '#f59e0b' }}>{returnStats.returnRate.toFixed(2)}%</span>
           </div>
         </div>
@@ -139,7 +154,8 @@ const DashboardScreen: React.FC = () => {
           </div>
           <div style={styles.statContent}>
             <span style={{...styles.statLabel, fontSize: 12}}>未发货退款</span>
-            <span style={styles.statValue}>{returnStats.normalOrders} ({returnStats.normalOrderRate.toFixed(2)}%)</span>
+            <span style={styles.statValue}>{returnStats.normalOrders}笔 ({returnStats.normalOrderRate.toFixed(2)}%)</span>
+            <span style={{...styles.statValue, fontSize: 12, color: '#6b7280'}}>金额: {formatCurrency(returnStats.normalOrdersAmount)}</span>
           </div>
         </div>
 
@@ -149,7 +165,8 @@ const DashboardScreen: React.FC = () => {
           </div>
           <div style={styles.statContent}>
             <span style={{...styles.statLabel, fontSize: 12}}>已发货退款</span>
-            <span style={styles.statValue}>{returnStats.returned} ({returnStats.returnedRate.toFixed(2)}%)</span>
+            <span style={styles.statValue}>{returnStats.returned}笔 ({returnStats.returnedRate.toFixed(2)}%)</span>
+            <span style={{...styles.statValue, fontSize: 12, color: '#6b7280'}}>金额: {formatCurrency(returnStats.returnedAmount)}</span>
           </div>
         </div>
 
@@ -159,7 +176,8 @@ const DashboardScreen: React.FC = () => {
           </div>
           <div style={styles.statContent}>
             <span style={{...styles.statLabel, fontSize: 12}}>已收货退款</span>
-            <span style={styles.statValue}>{returnStats.cancelledBeforeShip} ({returnStats.cancelBeforeShipRate.toFixed(2)}%)</span>
+            <span style={styles.statValue}>{returnStats.cancelledBeforeShip}笔 ({returnStats.cancelBeforeShipRate.toFixed(2)}%)</span>
+            <span style={{...styles.statValue, fontSize: 12, color: '#6b7280'}}>金额: {formatCurrency(returnStats.cancelledBeforeShipAmount)}</span>
           </div>
         </div>
 
@@ -169,7 +187,8 @@ const DashboardScreen: React.FC = () => {
           </div>
           <div style={styles.statContent}>
             <span style={{...styles.statLabel, fontSize: 12}}>未付款已取消</span>
-            <span style={styles.statValue}>{returnStats.cancelledInTransit}</span>
+            <span style={styles.statValue}>{returnStats.cancelledInTransit}笔</span>
+            <span style={{...styles.statValue, fontSize: 12, color: '#6b7280'}}>金额: {formatCurrency(returnStats.cancelledInTransitAmount)}</span>
           </div>
         </div>
       </div>
@@ -277,18 +296,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: 16,
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: 12,
     marginBottom: 24,
   },
   statCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     display: 'flex',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    minWidth: 0,
   },
   profitCard: {
     borderLeft: '4px solid #10b981',
@@ -297,25 +317,31 @@ const styles: Record<string, React.CSSProperties> = {
     borderLeft: '4px solid #ef4444',
   },
   statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: '#f3f4f6',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   statContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 4,
+    gap: 2,
+    overflow: 'hidden',
+    flex: 1,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#6b7280',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 700,
     color: '#1f2937',
   },

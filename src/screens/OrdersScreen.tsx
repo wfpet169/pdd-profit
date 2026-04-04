@@ -200,15 +200,15 @@ const OrdersScreen: React.FC = () => {
   // ========== 各列唯一值和计数 ==========
   // 唯一值基于筛选后的数据（联动），但保留已选中的选项
 
-  // 订单状态
+  // 订单状态（基于原始数据，不受自身筛选影响，用于下拉选项）
   const statusCounts = useMemo(() => {
-    return getFilteredForOrderNo.reduce((acc, order) => {
+    return ordersWithProfit.reduce((acc, order) => {
       if (order.orderStatus) {
         acc[order.orderStatus] = (acc[order.orderStatus] || 0) + 1;
       }
       return acc;
     }, {} as Record<string, number>);
-  }, [getFilteredForOrderNo]);
+  }, [ordersWithProfit]);
   const uniqueOrderStatuses = Object.keys(statusCounts).sort();
 
   // 订单号（基于筛选后的数据，联动）
@@ -605,7 +605,7 @@ const OrdersScreen: React.FC = () => {
               <th style={styles.th}>
                 订单号
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'orderNo' ? null : 'orderNo'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'orderNo' ? null : 'orderNo'); }}
                   style={{...styles.filterIconBtn, color: selectedOrderNos.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -642,7 +642,7 @@ const OrdersScreen: React.FC = () => {
               <th style={styles.th}>
                 商品规格
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'productName' ? null : 'productName'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'productName' ? null : 'productName'); }}
                   style={{...styles.filterIconBtn, color: selectedProductNames.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -682,7 +682,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'quantity' ? null : 'quantity'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'quantity' ? null : 'quantity'); }}
                   style={{...styles.filterIconBtn, color: selectedQuantities.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -725,7 +725,7 @@ const OrdersScreen: React.FC = () => {
                   <Filter size={14} />
                 </button>
                 {showStatusFilter && uniqueOrderStatuses.length > 0 && (
-                  <div style={styles.statusFilterDropdown} ref={statusFilterRef}>
+                  <div style={styles.statusFilterDropdown} ref={statusFilterRef} onClick={(e) => e.stopPropagation()}>
                     <div style={styles.statusFilterHeader}>
                       <span>选择订单状态</span>
                       {selectedOrderStatuses.length > 0 && (
@@ -740,12 +740,14 @@ const OrdersScreen: React.FC = () => {
                           type="checkbox"
                           checked={selectedOrderStatuses.includes(status)}
                           onChange={(e) => {
+                            e.stopPropagation();
                             if (e.target.checked) {
                               setSelectedOrderStatuses([...selectedOrderStatuses, status]);
                             } else {
                               setSelectedOrderStatuses(selectedOrderStatuses.filter(s => s !== status));
                             }
                           }}
+                          onClick={(e) => e.stopPropagation()}
                         />
                         <span>{status}（{statusCounts[status]}个）</span>
                       </label>
@@ -759,7 +761,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'amount' ? null : 'amount'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'amount' ? null : 'amount'); }}
                   style={{...styles.filterIconBtn, color: selectedAmounts.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -799,7 +801,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'cost' ? null : 'cost'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'cost' ? null : 'cost'); }}
                   style={{...styles.filterIconBtn, color: selectedCosts.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -839,7 +841,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'profit' ? null : 'profit'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'profit' ? null : 'profit'); }}
                   style={{...styles.filterIconBtn, color: selectedProfits.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -879,7 +881,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'profitMargin' ? null : 'profitMargin'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'profitMargin' ? null : 'profitMargin'); }}
                   style={{...styles.filterIconBtn, color: selectedProfitMargins.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />
@@ -919,7 +921,7 @@ const OrdersScreen: React.FC = () => {
                   <span style={{marginLeft: 4}}>{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'date' ? null : 'date'); }}
+                  onClick={(e) => { e.stopPropagation(); setShowStatusFilter(false); setShowFilterForColumn(showFilterForColumn === 'date' ? null : 'date'); }}
                   style={{...styles.filterIconBtn, color: selectedDates.length > 0 ? '#3b82f6' : '#9ca3af'}}
                 >
                   <Filter size={14} />

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Download, Upload, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Save, X, Download, Upload, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { costConfigStorage } from '../storage/Database';
 import type { CostConfig } from '../types';
 
@@ -8,6 +8,7 @@ const CostScreen: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [showBatchEditModal, setShowBatchEditModal] = useState(false);
   const [selectedCostIds, setSelectedCostIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -19,6 +20,28 @@ const CostScreen: React.FC = () => {
     shippingCost: 0,
     otherCosts: 0,
   });
+  // 批量修改表单：null 表示不修改该字段
+  const [batchEditForm, setBatchEditForm] = useState<{
+    costPrice: number | null;
+    platformFeeRate: number | null;
+    shippingCost: number | null;
+    otherCosts: number | null;
+  }>({
+    costPrice: null,
+    platformFeeRate: null,
+    shippingCost: null,
+    otherCosts: null,
+  });
+
+  // 筛选状态
+  type FilterColumn = 'productName' | 'costPrice' | 'platformFeeRate' | 'shippingCost' | 'otherCosts';
+  const [showFilterForColumn, setShowFilterForColumn] = useState<FilterColumn | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [selectedProductNames, setSelectedProductNames] = useState<string[]>([]);
+  const [selectedCostPrices, setSelectedCostPrices] = useState<number[]>([]);
+  const [selectedPlatformFeeRates, setSelectedPlatformFeeRates] = useState<number[]>([]);
+  const [selectedShippingCosts, setSelectedShippingCosts] = useState<number[]>([]);
+  const [selectedOtherCosts, setSelectedOtherCosts] = useState<number[]>([]);
 
   useEffect(() => {
     loadConfigs();
@@ -28,12 +51,100 @@ const CostScreen: React.FC = () => {
     setConfigs(costConfigStorage.getAll());
   };
 
+  // 各列唯一值和计数
+  const productNameCounts = useMemo(() => {
+    return configs.reduce((acc, config) => {
+      acc[config.productName] = (acc[config.productName] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [configs]);
+  const uniqueProductNames = Object.keys(productNameCounts).sort();
+
+  const costPriceCounts = useMemo(() => {
+    return configs.reduce((acc, config) => {
+      const key = config.costPrice.toString();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [configs]);
+  const uniqueCostPrices = Object.keys(costPriceCounts).map(Number).sort((a, b) => a - b);
+
+  const platformFeeRateCounts = useMemo(() => {
+    return configs.reduce((acc, config) => {
+      const key = config.platformFeeRate.toString();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [configs]);
+  const uniquePlatformFeeRates = Object.keys(platformFeeRateCounts).map(Number).sort((a, b) => a - b);
+
+  const shippingCostCounts = useMemo(() => {
+    return configs.reduce((acc, config) => {
+      const key = config.shippingCost.toString();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [configs]);
+  const uniqueShippingCosts = Object.keys(shippingCostCounts).map(Number).sort((a, b) => a - b);
+
+  const otherCostCounts = useMemo(() => {
+    return configs.reduce((acc, config) => {
+      const key = config.otherCosts.toString();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [configs]);
+  const uniqueOtherCosts = Object.keys(otherCostCounts).map(Number).sort((a, b) => a - b);
+
+  // 筛选后的数据
+  const filteredConfigs = useMemo(() => {
+    let filtered = [...configs];
+
+    if (selectedProductNames.length > 0) {
+      filtered = filtered.filter(c => selectedProductNames.includes(c.productName));
+    }
+    if (selectedCostPrices.length > 0) {
+      filtered = filtered.filter(c => selectedCostPrices.includes(c.costPrice));
+    }
+    if (selectedPlatformFeeRates.length > 0) {
+      filtered = filtered.filter(c => selectedPlatformFeeRates.includes(c.platformFeeRate));
+    }
+    if (selectedShippingCosts.length > 0) {
+      filtered = filtered.filter(c => selectedShippingCosts.includes(c.shippingCost));
+    }
+    if (selectedOtherCosts.length > 0) {
+      filtered = filtered.filter(c => selectedOtherCosts.includes(c.otherCosts));
+    }
+
+    return filtered;
+  }, [configs, selectedProductNames, selectedCostPrices, selectedPlatformFeeRates, selectedShippingCosts, selectedOtherCosts]);
+
   // 分页计算
-  const totalPages = Math.ceil(configs.length / pageSize);
-  const paginatedConfigs = configs.slice(
+  const totalPages = Math.ceil(filteredConfigs.length / pageSize);
+  const paginatedConfigs = filteredConfigs.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
+
+  // 点击外部关闭筛选下拉框
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilterForColumn(null);
+      }
+    };
+    if (showFilterForColumn) {
+      document.addEventListener('click', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showFilterForColumn]);
+
+  // 筛选条件变化时重置页码
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedProductNames, selectedCostPrices, selectedPlatformFeeRates, selectedShippingCosts, selectedOtherCosts]);
 
   // 导出成本数据
   const handleExport = () => {
@@ -146,12 +257,46 @@ const CostScreen: React.FC = () => {
     loadConfigs();
   };
 
+  // 批量修改
+  const handleBatchEdit = () => {
+    setBatchEditForm({
+      costPrice: null,
+      platformFeeRate: null,
+      shippingCost: null,
+      otherCosts: null,
+    });
+    setShowBatchEditModal(true);
+  };
+
+  const confirmBatchEdit = () => {
+    const updates: { id: string; updates: Partial<CostConfig> }[] = [];
+    selectedCostIds.forEach(id => {
+      const config = configs.find(c => c.id === id);
+      if (config) {
+        const updatesObj: Partial<CostConfig> = {};
+        if (batchEditForm.costPrice !== null) updatesObj.costPrice = batchEditForm.costPrice;
+        if (batchEditForm.platformFeeRate !== null) updatesObj.platformFeeRate = batchEditForm.platformFeeRate;
+        if (batchEditForm.shippingCost !== null) updatesObj.shippingCost = batchEditForm.shippingCost;
+        if (batchEditForm.otherCosts !== null) updatesObj.otherCosts = batchEditForm.otherCosts;
+        if (Object.keys(updatesObj).length > 0) {
+          updates.push({ id, updates: updatesObj });
+        }
+      }
+    });
+    if (updates.length > 0) {
+      costConfigStorage.batchUpdate(updates);
+      loadConfigs();
+    }
+    setShowBatchEditModal(false);
+    setSelectedCostIds([]);
+  };
+
   // 全选/取消全选
   const handleSelectAll = () => {
-    if (selectedCostIds.length === configs.length) {
+    if (selectedCostIds.length === filteredConfigs.length) {
       setSelectedCostIds([]);
     } else {
-      setSelectedCostIds(configs.map(c => c.id));
+      setSelectedCostIds(filteredConfigs.map(c => c.id));
     }
   };
 
@@ -222,6 +367,12 @@ const CostScreen: React.FC = () => {
               批量删除 ({selectedCostIds.length})
             </button>
           )}
+          {selectedCostIds.length > 0 && (
+            <button onClick={handleBatchEdit} style={styles.addBtn}>
+              <Edit2 size={18} />
+              批量修改 ({selectedCostIds.length})
+            </button>
+          )}
           <button onClick={() => setShowAddForm(true)} style={styles.addBtn}>
             <Plus size={18} />
             添加商品成本
@@ -249,15 +400,185 @@ const CostScreen: React.FC = () => {
                   <th style={{...styles.th, width: 40}}>
                     <input
                       type="checkbox"
-                      checked={configs.length > 0 && selectedCostIds.length === configs.length}
+                      checked={filteredConfigs.length > 0 && selectedCostIds.length === filteredConfigs.length}
                       onChange={handleSelectAll}
                     />
                   </th>
-                  <th style={styles.th}>商品规格</th>
-                  <th style={styles.th}>成本价</th>
-                  <th style={styles.th}>平台费率</th>
-                  <th style={styles.th}>快递成本</th>
-                  <th style={styles.th}>其他成本</th>
+                  <th style={styles.th}>
+                    商品规格
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'productName' ? null : 'productName'); }}
+                      style={{...styles.filterIconBtn, color: selectedProductNames.length > 0 ? '#3b82f6' : '#9ca3af'}}
+                    >
+                      <Filter size={14} />
+                    </button>
+                    {showFilterForColumn === 'productName' && (
+                      <div style={styles.filterDropdown} ref={filterRef} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.filterHeader}>
+                          <span>选择商品规格</span>
+                          {selectedProductNames.length > 0 && (
+                            <button onClick={() => setSelectedProductNames([])} style={styles.clearFilter}>清除</button>
+                          )}
+                        </div>
+                        {uniqueProductNames.map(name => (
+                          <label key={name} style={styles.filterItem}>
+                            <input
+                              type="checkbox"
+                              checked={selectedProductNames.includes(name)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedProductNames([...selectedProductNames, name]);
+                                } else {
+                                  setSelectedProductNames(selectedProductNames.filter(s => s !== name));
+                                }
+                              }}
+                            />
+                            <span>{name}（{productNameCounts[name]}个）</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </th>
+                  <th style={styles.th}>
+                    成本价
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'costPrice' ? null : 'costPrice'); }}
+                      style={{...styles.filterIconBtn, color: selectedCostPrices.length > 0 ? '#3b82f6' : '#9ca3af'}}
+                    >
+                      <Filter size={14} />
+                    </button>
+                    {showFilterForColumn === 'costPrice' && (
+                      <div style={styles.filterDropdown} ref={filterRef} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.filterHeader}>
+                          <span>选择成本价</span>
+                          {selectedCostPrices.length > 0 && (
+                            <button onClick={() => setSelectedCostPrices([])} style={styles.clearFilter}>清除</button>
+                          )}
+                        </div>
+                        {uniqueCostPrices.map(price => (
+                          <label key={price} style={styles.filterItem}>
+                            <input
+                              type="checkbox"
+                              checked={selectedCostPrices.includes(price)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCostPrices([...selectedCostPrices, price]);
+                                } else {
+                                  setSelectedCostPrices(selectedCostPrices.filter(s => s !== price));
+                                }
+                              }}
+                            />
+                            <span>{formatCurrency(price)}（{costPriceCounts[price.toString()]}个）</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </th>
+                  <th style={styles.th}>
+                    平台费率
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'platformFeeRate' ? null : 'platformFeeRate'); }}
+                      style={{...styles.filterIconBtn, color: selectedPlatformFeeRates.length > 0 ? '#3b82f6' : '#9ca3af'}}
+                    >
+                      <Filter size={14} />
+                    </button>
+                    {showFilterForColumn === 'platformFeeRate' && (
+                      <div style={styles.filterDropdown} ref={filterRef} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.filterHeader}>
+                          <span>选择平台费率</span>
+                          {selectedPlatformFeeRates.length > 0 && (
+                            <button onClick={() => setSelectedPlatformFeeRates([])} style={styles.clearFilter}>清除</button>
+                          )}
+                        </div>
+                        {uniquePlatformFeeRates.map(rate => (
+                          <label key={rate} style={styles.filterItem}>
+                            <input
+                              type="checkbox"
+                              checked={selectedPlatformFeeRates.includes(rate)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedPlatformFeeRates([...selectedPlatformFeeRates, rate]);
+                                } else {
+                                  setSelectedPlatformFeeRates(selectedPlatformFeeRates.filter(s => s !== rate));
+                                }
+                              }}
+                            />
+                            <span>{rate}%（{platformFeeRateCounts[rate.toString()]}个）</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </th>
+                  <th style={styles.th}>
+                    快递成本
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'shippingCost' ? null : 'shippingCost'); }}
+                      style={{...styles.filterIconBtn, color: selectedShippingCosts.length > 0 ? '#3b82f6' : '#9ca3af'}}
+                    >
+                      <Filter size={14} />
+                    </button>
+                    {showFilterForColumn === 'shippingCost' && (
+                      <div style={styles.filterDropdown} ref={filterRef} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.filterHeader}>
+                          <span>选择快递成本</span>
+                          {selectedShippingCosts.length > 0 && (
+                            <button onClick={() => setSelectedShippingCosts([])} style={styles.clearFilter}>清除</button>
+                          )}
+                        </div>
+                        {uniqueShippingCosts.map(cost => (
+                          <label key={cost} style={styles.filterItem}>
+                            <input
+                              type="checkbox"
+                              checked={selectedShippingCosts.includes(cost)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedShippingCosts([...selectedShippingCosts, cost]);
+                                } else {
+                                  setSelectedShippingCosts(selectedShippingCosts.filter(s => s !== cost));
+                                }
+                              }}
+                            />
+                            <span>{formatCurrency(cost)}（{shippingCostCounts[cost.toString()]}个）</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </th>
+                  <th style={styles.th}>
+                    其他成本
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowFilterForColumn(showFilterForColumn === 'otherCosts' ? null : 'otherCosts'); }}
+                      style={{...styles.filterIconBtn, color: selectedOtherCosts.length > 0 ? '#3b82f6' : '#9ca3af'}}
+                    >
+                      <Filter size={14} />
+                    </button>
+                    {showFilterForColumn === 'otherCosts' && (
+                      <div style={styles.filterDropdown} ref={filterRef} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.filterHeader}>
+                          <span>选择其他成本</span>
+                          {selectedOtherCosts.length > 0 && (
+                            <button onClick={() => setSelectedOtherCosts([])} style={styles.clearFilter}>清除</button>
+                          )}
+                        </div>
+                        {uniqueOtherCosts.map(cost => (
+                          <label key={cost} style={styles.filterItem}>
+                            <input
+                              type="checkbox"
+                              checked={selectedOtherCosts.includes(cost)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedOtherCosts([...selectedOtherCosts, cost]);
+                                } else {
+                                  setSelectedOtherCosts(selectedOtherCosts.filter(s => s !== cost));
+                                }
+                              }}
+                            />
+                            <span>{formatCurrency(cost)}（{otherCostCounts[cost.toString()]}个）</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </th>
                   <th style={styles.th}>操作</th>
                 </tr>
               </thead>
@@ -404,6 +725,76 @@ const CostScreen: React.FC = () => {
               </button>
               <button onClick={handleBatchDelete} style={styles.confirmBtn}>
                 删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量修改弹窗 */}
+      {showBatchEditModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.formModal}>
+            <div style={styles.formHeader}>
+              <h3>批量修改成本配置（已选择 {selectedCostIds.length} 条）</h3>
+              <button onClick={() => setShowBatchEditModal(false)} style={styles.closeBtn}>
+                <X size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 16 }}>留空表示不修改该字段</p>
+            <div style={styles.formGrid}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>成本价 (元/件)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={batchEditForm.costPrice ?? ''}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, costPrice: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={styles.input}
+                  placeholder="留空不修改"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>平台服务费 (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={batchEditForm.platformFeeRate ?? ''}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, platformFeeRate: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={styles.input}
+                  placeholder="留空不修改"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>快递成本 (元/单)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={batchEditForm.shippingCost ?? ''}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, shippingCost: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={styles.input}
+                  placeholder="留空不修改"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>其他成本 (元/单)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={batchEditForm.otherCosts ?? ''}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, otherCosts: e.target.value ? parseFloat(e.target.value) : null })}
+                  style={styles.input}
+                  placeholder="留空不修改"
+                />
+              </div>
+            </div>
+            <div style={styles.formActions}>
+              <button onClick={() => setShowBatchEditModal(false)} style={styles.cancelBtn}>
+                取消
+              </button>
+              <button onClick={confirmBatchEdit} style={styles.saveBtn}>
+                <Save size={18} />
+                确认修改
               </button>
             </div>
           </div>
@@ -626,6 +1017,64 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 500,
   },
+  filterIconBtn: {
+    padding: 2,
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#9ca3af',
+    marginLeft: 4,
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
+  filterDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    backgroundColor: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    zIndex: 100,
+    minWidth: 200,
+    maxWidth: 300,
+    maxHeight: 300,
+    overflowY: 'auto',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  },
+  filterHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottom: '1px solid #e5e7eb',
+  },
+  filterItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '4px 0',
+    fontSize: 14,
+    cursor: 'pointer',
+  },
+  clearFilter: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#3b82f6',
+    cursor: 'pointer',
+    fontSize: 12,
+  },
+  th: {
+    padding: '12px 16px',
+    textAlign: 'left',
+    backgroundColor: '#f9fafb',
+    fontWeight: 600,
+    fontSize: 14,
+    color: '#374151',
+    borderBottom: '1px solid #e5e7eb',
+    position: 'relative',
+  },
   emptyState: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -676,8 +1125,9 @@ const styles: Record<string, React.CSSProperties> = {
   tableContainer: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: 'visible',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    position: 'relative',
   },
   table: {
     width: '100%',
@@ -691,6 +1141,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     color: '#374151',
     borderBottom: '1px solid #e5e7eb',
+    position: 'relative',
   },
   tr: {
     borderBottom: '1px solid #f3f4f6',

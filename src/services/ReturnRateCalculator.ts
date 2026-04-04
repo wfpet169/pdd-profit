@@ -1,5 +1,6 @@
 import type { Order, TimeRange } from '../types';
 import { filterOrdersByTimeRange } from '../storage/Database';
+import { calculateOrderProfitWithConfig } from './ProfitCalculator';
 
 // 退货率统计数据
 export interface ReturnRateStats {
@@ -15,6 +16,10 @@ export interface ReturnRateStats {
   returnOrderRate: number;
   normalOrderRate: number;
   returnedRate: number;
+  normalOrdersAmount: number;
+  returnedAmount: number;
+  cancelledBeforeShipAmount: number;
+  cancelledInTransitAmount: number;
 }
 
 // 计算退货率统计
@@ -26,13 +31,21 @@ export function calculateReturnRateStats(orders: Order[], range: TimeRange = 'al
 
   // 使用 order.orderStatus 字段（Excel原始值）
   // 未发货退款
-  const normalOrders = filteredOrders.filter(o => o.orderStatus === '未发货，退款成功').length;
+  const normalOrdersData = filteredOrders.filter(o => o.orderStatus === '未发货，退款成功');
+  const normalOrders = normalOrdersData.length;
+  const normalOrdersAmount = normalOrdersData.reduce((sum, o) => sum + o.totalAmount, 0);
   // 已发货退款
-  const returned = filteredOrders.filter(o => o.orderStatus === '已发货，退款成功').length;
+  const returnedData = filteredOrders.filter(o => o.orderStatus === '已发货，退款成功');
+  const returned = returnedData.length;
+  const returnedAmount = returnedData.reduce((sum, o) => sum + o.totalAmount, 0);
   // 已收货退款
-  const cancelledBeforeShip = filteredOrders.filter(o => o.orderStatus === '已收货，退款成功').length;
+  const cancelledBeforeShipData = filteredOrders.filter(o => o.orderStatus === '已收货，退款成功');
+  const cancelledBeforeShip = cancelledBeforeShipData.length;
+  const cancelledBeforeShipAmount = cancelledBeforeShipData.reduce((sum, o) => sum + o.totalAmount, 0);
   // 未付款已取消
-  const cancelledInTransit = filteredOrders.filter(o => o.orderStatus === '已取消').length;
+  const cancelledInTransitData = filteredOrders.filter(o => o.orderStatus === '已取消');
+  const cancelledInTransit = cancelledInTransitData.length;
+  const cancelledInTransitAmount = cancelledInTransitData.reduce((sum, o) => sum + o.totalAmount, 0);
 
   // 总退货率 = 退款类型订单数（不含已取消）/ 总订单数
   const totalCancelled = normalOrders + returned + cancelledBeforeShip;
@@ -50,6 +63,10 @@ export function calculateReturnRateStats(orders: Order[], range: TimeRange = 'al
     returnOrderRate: totalOrders > 0 ? (totalCancelled / totalOrders) * 100 : 0,
     normalOrderRate: totalOrders > 0 ? (normalOrders / totalOrders) * 100 : 0,
     returnedRate: totalOrders > 0 ? (returned / totalOrders) * 100 : 0,
+    normalOrdersAmount,
+    returnedAmount,
+    cancelledBeforeShipAmount,
+    cancelledInTransitAmount,
   };
 }
 
@@ -109,6 +126,22 @@ export function generateReturnRateTrend(orders: Order[], range: TimeRange = 'mon
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return trendData;
+}
+
+// 计算货损成本（已发货退款、已收货退款的成本）
+export function calculateGoodsLossCost(orders: Order[], range: TimeRange = 'all'): number {
+  const filteredOrders = filterOrdersByTimeRange(orders, range);
+
+  return filteredOrders
+    .filter(o =>
+      o.orderStatus === '已发货，退款成功' ||
+      o.orderStatus === '已收货，退款成功'
+    )
+    .reduce((sum, order) => {
+      const orderWithCost = calculateOrderProfitWithConfig(order);
+      const cost = (orderWithCost.costPrice || 0) * (order.quantity || 0) + (orderWithCost.platformFee || 0) + (orderWithCost.shippingFee || 0) + (orderWithCost.otherFees || 0);
+      return sum + cost;
+    }, 0);
 }
 
 // 计算因退货导致的损失金额

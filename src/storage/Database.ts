@@ -79,6 +79,17 @@ export const costConfigStorage = {
     this.save(configs);
   },
 
+  batchUpdate(updates: { id: string; updates: Partial<CostConfig> }[]): void {
+    const configs = this.getAll();
+    updates.forEach(({ id, updates }) => {
+      const index = configs.findIndex(c => c.id === id);
+      if (index >= 0) {
+        configs[index] = { ...configs[index], ...updates };
+      }
+    });
+    this.save(configs);
+  },
+
   getByProductName(productName: string): CostConfig | undefined {
     return this.getAll().find(c => c.productName === productName);
   },

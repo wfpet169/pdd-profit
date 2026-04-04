@@ -50,8 +50,13 @@ export function calculateOrderProfitWithConfig(order: Order): Order {
 export function calculateProfitStats(orders: Order[], range: TimeRange = 'all'): ProfitStats {
   const filteredOrders = filterOrdersByTimeRange(orders, range);
 
-  // 排除已取消订单（未付款已取消）
-  const validOrders = filteredOrders.filter(o => o.orderStatus !== '已取消');
+  // 排除已取消订单和退款订单
+  const validOrders = filteredOrders.filter(o =>
+    o.orderStatus !== '已取消' &&
+    o.orderStatus !== '未发货，退款成功' &&
+    o.orderStatus !== '已发货，退款成功' &&
+    o.orderStatus !== '已收货，退款成功'
+  );
 
   // 先应用成本配置计算利润
   const ordersWithProfit = validOrders.map(calculateOrderProfitWithConfig);

@@ -212,13 +212,6 @@ export function parseExcelData(file: File): Promise<Order[]> {
 
 // 导出数据到Excel
 export function exportToExcel(orders: Order[]): void {
-  const statusMap: Record<OrderStatus, string> = {
-    'normal': '无售后或售后取消',
-    'cancelled_before_ship': '无售后或售后取消',
-    'cancelled_in_transit': '售后处理中',
-    'returned': '退款成功',
-  };
-
   const data = orders.map(order => ({
     '订单号': order.orderNo,
     '商品规格': order.productName,
@@ -230,7 +223,7 @@ export function exportToExcel(orders: Order[]): void {
     '成本价': order.costPrice,
     '其他费用': order.otherFees,
     '利润': order.profit || 0,
-    '售后状态': statusMap[order.status] || '正常',
+    '订单状态': order.orderStatus,
     '订单日期': order.orderDate,
   }));
 
