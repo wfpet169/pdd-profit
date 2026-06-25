@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Download, Upload, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { costConfigStorage } from '../storage/Database';
 import type { CostConfig } from '../types';
 
+function generateId(): string {
+  return crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 const CostScreen: React.FC = () => {
-  const [configs, setConfigs] = useState<CostConfig[]>([]);
+  const [configs, setConfigs] = useState<CostConfig[]>(() => costConfigStorage.getAll());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
@@ -43,13 +47,9 @@ const CostScreen: React.FC = () => {
   const [selectedShippingCosts, setSelectedShippingCosts] = useState<number[]>([]);
   const [selectedOtherCosts, setSelectedOtherCosts] = useState<number[]>([]);
 
-  useEffect(() => {
-    loadConfigs();
-  }, []);
-
-  const loadConfigs = () => {
+  const loadConfigs = useCallback(() => {
     setConfigs(costConfigStorage.getAll());
-  };
+  }, []);
 
   // 各列唯一值和计数
   const productNameCounts = useMemo(() => {
@@ -120,10 +120,11 @@ const CostScreen: React.FC = () => {
   }, [configs, selectedProductNames, selectedCostPrices, selectedPlatformFeeRates, selectedShippingCosts, selectedOtherCosts]);
 
   // 分页计算
-  const totalPages = Math.ceil(filteredConfigs.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredConfigs.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedConfigs = filteredConfigs.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
   );
 
   // 点击外部关闭筛选下拉框
@@ -140,11 +141,6 @@ const CostScreen: React.FC = () => {
       document.removeEventListener('click', handleClickOutside);
     };
   }, [showFilterForColumn]);
-
-  // 筛选条件变化时重置页码
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedProductNames, selectedCostPrices, selectedPlatformFeeRates, selectedShippingCosts, selectedOtherCosts]);
 
   // 导出成本数据
   const handleExport = () => {
@@ -189,7 +185,7 @@ const CostScreen: React.FC = () => {
             // 不存在则添加
             merged.push({
               ...item,
-              id: item.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
+              id: item.id || generateId(),
             });
           }
         });
@@ -197,7 +193,7 @@ const CostScreen: React.FC = () => {
         costConfigStorage.save(merged);
         loadConfigs();
         alert(`成功导入 ${importedData.length} 条成本配置`);
-      } catch (err) {
+      } catch {
         alert('导入失败，请检查文件格式');
       }
     };
@@ -212,7 +208,7 @@ const CostScreen: React.FC = () => {
     }
 
     const newConfig: CostConfig = {
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+      id: generateId(),
       productName: formData.productName!,
       costPrice: formData.costPrice || 0,
       platformFeeRate: formData.platformFeeRate || 0,
@@ -636,7 +632,7 @@ const CostScreen: React.FC = () => {
           <div style={styles.pagination}>
             <button
               onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
+              disabled={safeCurrentPage === 1}
               style={styles.pageBtn}
               title="首页"
             >
@@ -644,7 +640,7 @@ const CostScreen: React.FC = () => {
             </button>
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={safeCurrentPage === 1}
               style={styles.pageBtn}
             >
               <ChevronLeft size={20} />
@@ -655,12 +651,12 @@ const CostScreen: React.FC = () => {
               let pageNum: number;
               if (totalPages <= 5) {
                 pageNum = i + 1;
-              } else if (currentPage <= 3) {
+              } else if (safeCurrentPage <= 3) {
                 pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
+              } else if (safeCurrentPage >= totalPages - 2) {
                 pageNum = totalPages - 4 + i;
               } else {
-                pageNum = currentPage - 2 + i;
+                pageNum = safeCurrentPage - 2 + i;
               }
               return (
                 <button
@@ -668,7 +664,7 @@ const CostScreen: React.FC = () => {
                   onClick={() => setCurrentPage(pageNum)}
                   style={{
                     ...styles.pageBtn,
-                    ...(currentPage === pageNum ? styles.pageBtnActive : {}),
+                    ...(safeCurrentPage === pageNum ? styles.pageBtnActive : {}),
                   }}
                 >
                   {pageNum}
@@ -678,14 +674,14 @@ const CostScreen: React.FC = () => {
 
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={safeCurrentPage === totalPages}
               style={styles.pageBtn}
             >
               <ChevronRight size={20} />
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
+              disabled={safeCurrentPage === totalPages}
               style={styles.pageBtn}
               title="末页"
             >
@@ -693,7 +689,7 @@ const CostScreen: React.FC = () => {
             </button>
 
             <span style={styles.pageInfo}>
-              第 {currentPage} / {totalPages} 页
+              第 {safeCurrentPage} / {totalPages} 页
             </span>
           </div>
         </div>
@@ -1132,16 +1128,6 @@ const styles: Record<string, React.CSSProperties> = {
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-  },
-  th: {
-    padding: '12px 16px',
-    textAlign: 'left',
-    backgroundColor: '#f9fafb',
-    fontWeight: 600,
-    fontSize: 14,
-    color: '#374151',
-    borderBottom: '1px solid #e5e7eb',
-    position: 'relative',
   },
   tr: {
     borderBottom: '1px solid #f3f4f6',

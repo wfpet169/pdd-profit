@@ -1,5 +1,11 @@
-import * as XLSX from 'xlsx';
 import type { Order, OrderStatus } from '../types';
+
+const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_IMPORT_ROWS = 50000;
+const MAX_IMPORT_COLUMNS = 200;
+
+type SpreadsheetCell = string | number | boolean | Date | null | undefined;
+type SpreadsheetRow = SpreadsheetCell[];
 
 // 生成唯一ID
 function generateId(): string {
@@ -7,7 +13,7 @@ function generateId(): string {
 }
 
 // 解析日期
-function parseDate(value: any): string {
+function parseDate(value: SpreadsheetCell): string {
   if (!value) return '';
 
   if (value instanceof Date) {
@@ -20,6 +26,10 @@ function parseDate(value: any): string {
     return date.toISOString().split('T')[0];
   }
 
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return '';
+  }
+
   // 尝试解析字符串日期
   const parsed = new Date(value);
   if (!isNaN(parsed.getTime())) {
@@ -30,7 +40,7 @@ function parseDate(value: any): string {
 }
 
 // 解析数字
-function parseNumber(value: any): number {
+function parseNumber(value: SpreadsheetCell): number {
   if (typeof value === 'number') return value;
   if (!value) return 0;
 
@@ -40,7 +50,7 @@ function parseNumber(value: any): number {
 }
 
 // 解析订单状态，直接返回原始值
-function parseOrderStatus(value: any): OrderStatus {
+function parseOrderStatus(value: SpreadsheetCell): OrderStatus {
   if (!value) return '';
   return String(value).trim();
 }
@@ -93,19 +103,36 @@ function normalizeHeader(header: string): string {
 // 解析Excel/CSV数据
 export function parseExcelData(file: File): Promise<Order[]> {
   return new Promise((resolve, reject) => {
+    if (file.size > MAX_IMPORT_FILE_SIZE) {
+      reject(new Error('文件过大，请导入 10MB 以内的文件'));
+      return;
+    }
+
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        const XLSX = await import('xlsx');
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
 
         // 获取第一个工作表
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
         // 转换为JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const jsonData = XLSX.utils.sheet_to_json<SpreadsheetRow>(worksheet, {
+          header: 1,
+          blankrows: false,
+        });
+
+        if (jsonData.length > MAX_IMPORT_ROWS) {
+          throw new Error(`导入行数不能超过 ${MAX_IMPORT_ROWS} 行`);
+        }
+
+        if (jsonData.some(row => row.length > MAX_IMPORT_COLUMNS)) {
+          throw new Error(`导入列数不能超过 ${MAX_IMPORT_COLUMNS} 列`);
+        }
 
         if (jsonData.length < 2) {
           resolve([]);
@@ -206,12 +233,13 @@ export function parseExcelData(file: File): Promise<Order[]> {
     };
 
     reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   });
 }
 
 // 导出数据到Excel
-export function exportToExcel(orders: Order[]): void {
+export async function exportToExcel(orders: Order[]): Promise<void> {
+  const XLSX = await import('xlsx');
   const data = orders.map(order => ({
     '订单号': order.orderNo,
     '商品规格': order.productName,

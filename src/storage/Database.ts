@@ -5,11 +5,22 @@ const STORAGE_KEYS = {
   COST_CONFIG: 'pdd_cost_config',
 };
 
+function readArray<T>(key: string): T[] {
+  const data = localStorage.getItem(key);
+  if (!data) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed as T[] : [];
+  } catch {
+    return [];
+  }
+}
+
 // 订单存储
 export const orderStorage = {
   getAll(): Order[] {
-    const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
-    return data ? JSON.parse(data) : [];
+    return readArray<Order>(STORAGE_KEYS.ORDERS);
   },
 
   save(orders: Order[]): void {
@@ -46,8 +57,7 @@ export const orderStorage = {
 // 成本配置存储
 export const costConfigStorage = {
   getAll(): CostConfig[] {
-    const data = localStorage.getItem(STORAGE_KEYS.COST_CONFIG);
-    return data ? JSON.parse(data) : [];
+    return readArray<CostConfig>(STORAGE_KEYS.COST_CONFIG);
   },
 
   save(configs: CostConfig[]): void {
@@ -111,18 +121,21 @@ export function filterOrdersByTimeRange(orders: Order[], range: TimeRange): Orde
     switch (range) {
       case 'today':
         return orderDate >= today;
-      case 'week':
+      case 'week': {
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
         return orderDate >= weekAgo;
-      case 'month':
+      }
+      case 'month': {
         const monthAgo = new Date(today);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         return orderDate >= monthAgo;
-      case 'year':
+      }
+      case 'year': {
         const yearAgo = new Date(today);
         yearAgo.setFullYear(yearAgo.getFullYear() - 1);
         return orderDate >= yearAgo;
+      }
       default:
         return true;
     }

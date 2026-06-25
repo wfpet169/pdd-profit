@@ -10,8 +10,7 @@ type SortField = 'quantity' | 'totalAmount' | 'cost' | 'profit' | 'profitMargin'
 type SortOrder = 'asc' | 'desc';
 
 const OrdersScreen: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => orderStorage.getAll());
   const [searchTerm, setSearchTerm] = useState('');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -289,14 +288,6 @@ const OrdersScreen: React.FC = () => {
   }, [getFilteredForDate]);
   const uniqueDates = Object.keys(dateCounts).sort();
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  useEffect(() => {
-    filterOrders();
-  }, [orders, searchTerm, timeRange, sortField, sortOrder, selectedOrderStatuses, selectedOrderNos, selectedProductNames, selectedQuantities, selectedAmounts, selectedCosts, selectedProfits, selectedProfitMargins, selectedDates, showFilterForColumn]);
-
   // 点击外部关闭筛选下拉框
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -320,7 +311,7 @@ const OrdersScreen: React.FC = () => {
     setOrders(allOrders);
   };
 
-  const filterOrders = () => {
+  const filteredOrders = useMemo(() => {
     let filtered = [...orders];
 
     // 先计算利润，确保 profit 字段有值
@@ -394,18 +385,21 @@ const OrdersScreen: React.FC = () => {
         switch (timeRange) {
           case 'today':
             return orderDate >= today;
-          case 'week':
+          case 'week': {
             const weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
             return orderDate >= weekAgo;
-          case 'month':
+          }
+          case 'month': {
             const monthAgo = new Date(today);
             monthAgo.setMonth(monthAgo.getMonth() - 1);
             return orderDate >= monthAgo;
-          case 'year':
+          }
+          case 'year': {
             const yearAgo = new Date(today);
             yearAgo.setFullYear(yearAgo.getFullYear() - 1);
             return orderDate >= yearAgo;
+          }
           default:
             return true;
         }
@@ -460,9 +454,23 @@ const OrdersScreen: React.FC = () => {
       filtered.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
     }
 
-    setFilteredOrders(filtered);
-    setCurrentPage(1);
-  };
+    return filtered;
+  }, [
+    orders,
+    searchTerm,
+    selectedAmounts,
+    selectedCosts,
+    selectedDates,
+    selectedOrderNos,
+    selectedOrderStatuses,
+    selectedProductNames,
+    selectedProfitMargins,
+    selectedProfits,
+    selectedQuantities,
+    sortField,
+    sortOrder,
+    timeRange,
+  ]);
 
   // 处理排序点击
   const handleSort = (field: SortField) => {
@@ -507,7 +515,7 @@ const OrdersScreen: React.FC = () => {
   };
 
   const handleExport = () => {
-    exportToExcel(filteredOrders);
+    void exportToExcel(filteredOrders);
   };
 
   const handleClearAll = () => {
@@ -521,10 +529,11 @@ const OrdersScreen: React.FC = () => {
     return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value);
   };
 
-  const totalPages = Math.ceil(filteredOrders.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
   );
 
   const timeRanges = [
@@ -1057,7 +1066,7 @@ const OrdersScreen: React.FC = () => {
         <div style={styles.pagination}>
           <button
             onClick={() => setCurrentPage(1)}
-            disabled={currentPage === 1}
+            disabled={safeCurrentPage === 1}
             style={styles.pageBtn}
             title="首页"
           >
@@ -1065,7 +1074,7 @@ const OrdersScreen: React.FC = () => {
           </button>
           <button
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
+            disabled={safeCurrentPage === 1}
             style={styles.pageBtn}
           >
             <ChevronLeft size={20} />
@@ -1076,12 +1085,12 @@ const OrdersScreen: React.FC = () => {
             let pageNum: number;
             if (totalPages <= 5) {
               pageNum = i + 1;
-            } else if (currentPage <= 3) {
+            } else if (safeCurrentPage <= 3) {
               pageNum = i + 1;
-            } else if (currentPage >= totalPages - 2) {
+            } else if (safeCurrentPage >= totalPages - 2) {
               pageNum = totalPages - 4 + i;
             } else {
-              pageNum = currentPage - 2 + i;
+              pageNum = safeCurrentPage - 2 + i;
             }
             return (
               <button
@@ -1089,7 +1098,7 @@ const OrdersScreen: React.FC = () => {
                 onClick={() => setCurrentPage(pageNum)}
                 style={{
                   ...styles.pageBtn,
-                  ...(currentPage === pageNum ? styles.pageBtnActive : {}),
+                  ...(safeCurrentPage === pageNum ? styles.pageBtnActive : {}),
                 }}
               >
                 {pageNum}
@@ -1099,14 +1108,14 @@ const OrdersScreen: React.FC = () => {
 
           <button
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
+            disabled={safeCurrentPage === totalPages}
             style={styles.pageBtn}
           >
             <ChevronRight size={20} />
           </button>
           <button
             onClick={() => setCurrentPage(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={safeCurrentPage === totalPages}
             style={styles.pageBtn}
             title="末页"
           >
@@ -1114,7 +1123,7 @@ const OrdersScreen: React.FC = () => {
           </button>
 
           <span style={styles.pageInfo}>
-            第 {currentPage} / {totalPages} 页
+            第 {safeCurrentPage} / {totalPages} 页
           </span>
         </div>
       </div>

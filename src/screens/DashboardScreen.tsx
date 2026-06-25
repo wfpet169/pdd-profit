@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Percent, ArrowUp, ArrowDown, RotateCcw, PackageX, Truck, AlertTriangle } from 'lucide-react';
 import { orderStorage } from '../storage/Database';
@@ -8,43 +8,31 @@ import type { TimeRange } from '../types';
 
 const DashboardScreen: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
-  const [stats, setStats] = useState({ totalRevenue: 0, totalCost: 0, totalProfit: 0, profitRate: 0, orderCount: 0, avgProfit: 0 });
-  const [returnStats, setReturnStats] = useState<ReturnRateStats>({
-    totalOrders: 0, normalOrders: 0, cancelledBeforeShip: 0, cancelledInTransit: 0,
-    returned: 0, totalCancelled: 0, returnRate: 0, cancelBeforeShipRate: 0,
-    cancelInTransitRate: 0, returnOrderRate: 0, normalOrderRate: 0, returnedRate: 0,
-    normalOrdersAmount: 0, returnedAmount: 0, cancelledBeforeShipAmount: 0, cancelledInTransitAmount: 0
-  });
-  const [returnLoss, setReturnLoss] = useState(0);
-  const [goodsLossCost, setGoodsLossCost] = useState(0);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [topProducts, setTopProducts] = useState<{ name: string; quantity: number; revenue: number }[]>([]);
-
-  useEffect(() => {
-    loadData();
-  }, [timeRange]);
-
-  const loadData = () => {
+  const {
+    stats,
+    returnStats,
+    returnLoss,
+    goodsLossCost,
+    chartData,
+    topProducts,
+  } = useMemo(() => {
     const allOrders = orderStorage.getAll();
 
     const profitStats = calculateProfitStats(allOrders, timeRange);
-    setStats(profitStats);
-
     const returnRate = calculateReturnRateStats(allOrders, timeRange);
-    setReturnStats(returnRate);
-
     const loss = calculateReturnLoss(allOrders, timeRange);
-    setReturnLoss(loss);
-
     const goodsLoss = calculateGoodsLossCost(allOrders, timeRange);
-    setGoodsLossCost(goodsLoss);
-
     const chart = generateChartData(allOrders, timeRange);
-    setChartData(chart);
-
     const top = getTopProducts(allOrders);
-    setTopProducts(top);
-  };
+    return {
+      stats: profitStats,
+      returnStats: returnRate as ReturnRateStats,
+      returnLoss: loss,
+      goodsLossCost: goodsLoss,
+      chartData: chart,
+      topProducts: top,
+    };
+  }, [timeRange]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value);
