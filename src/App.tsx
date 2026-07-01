@@ -7,7 +7,7 @@ import CostScreen from './screens/CostScreen';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <div style={styles.app}>
         {/* 侧边栏导航 */}
         <nav style={styles.sidebar}>
